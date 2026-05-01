@@ -1,0 +1,122 @@
+.reminders-page {
+  animation: fadeIn 0.5s ease;
+}
+
+.reminder-section {
+  margin-bottom: 32px;
+}
+
+.reminder-section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reminder-section-title.past {
+  color: var(--text-muted);
+}
+
+.reminder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.reminder-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  animation: fadeIn 0.3s ease backwards;
+}
+
+.reminder-card.past {
+  opacity: 0.5;
+}
+
+.reminder-bell {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.reminder-bell.active {
+  background: rgba(108, 92, 231, 0.15);
+  color: var(--accent-primary);
+  animation: glow 3s ease-in-out infinite;
+}
+
+.reminder-bell.muted {
+  background: rgba(108, 106, 133, 0.1);
+  color: var(--text-muted);
+}
+
+.reminder-info {
+  flex: 1;
+}
+
+.reminder-info h4 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.reminder-desc {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.reminder-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.reminder-time {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.reminder-countdown {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--accent-secondary);
+  background: rgba(108, 92, 231, 0.1);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+.reminder-recurring {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  color: var(--color-success);
+  font-weight: 600;
+}
+
+.reminder-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.reminder-card:hover .reminder-actions {
+  opacity: 1;
+}
+
+@media (max-width: 768px) {
+  .reminder-card { flex-wrap: wrap; }
+  .reminder-actions { opacity: 1; }
+}

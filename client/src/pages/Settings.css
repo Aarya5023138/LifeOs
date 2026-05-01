@@ -1,0 +1,457 @@
+.settings-page {
+  animation: fadeIn 0.4s ease;
+  max-width: 860px;
+}
+
+.settings-section {
+  margin-bottom: 32px;
+}
+
+.settings-section-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.settings-section-header .section-icon {
+  font-size: 1.5rem;
+  color: var(--accent-primary);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.settings-section-header h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.settings-section-header p {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.settings-card {
+  padding: 20px;
+}
+
+/* Pomodoro Widget */
+.pomodoro-widget {
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.pomodoro-display {
+  display: flex;
+  justify-content: center;
+}
+
+.pomodoro-ring {
+  position: relative;
+  width: 200px;
+  height: 200px;
+}
+
+.pomodoro-ring svg {
+  width: 100%;
+  height: 100%;
+}
+
+.pomodoro-ring-fill {
+  transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pomodoro-time-display {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.pomodoro-phase-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin-bottom: 4px;
+}
+
+.pomodoro-time {
+  font-size: 2.75rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.pomodoro-sessions {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.pomodoro-controls {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.pomodoro-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 0.875rem;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+}
+
+.pomodoro-btn.play {
+  background: var(--accent-gradient);
+  color: white;
+}
+
+.pomodoro-btn.play:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--accent-glow);
+}
+
+.pomodoro-btn.pause {
+  background: rgba(253, 203, 110, 0.15);
+  color: var(--color-warning);
+  border: 1px solid rgba(253, 203, 110, 0.25);
+}
+
+.pomodoro-btn.pause:hover {
+  background: rgba(253, 203, 110, 0.25);
+}
+
+.pomodoro-btn.reset {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.pomodoro-btn.reset:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.pomodoro-settings {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  width: 100%;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-color);
+}
+
+.pomodoro-setting-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pomodoro-setting-item label {
+  margin-bottom: 0;
+  font-size: 0.7rem;
+}
+
+.pomodoro-setting-item input {
+  width: 100%;
+  text-align: center;
+  padding: 8px;
+}
+
+.pomodoro-setting-item.toggle-item {
+  align-items: center;
+}
+
+/* Color Presets */
+.color-presets {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.color-preset {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 8px;
+  border-radius: var(--radius-md);
+  border: 2px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+}
+
+.color-preset:hover {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--border-color);
+}
+
+.color-preset.active {
+  border-color: var(--preset-color);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.color-swatch {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--preset-color);
+  transition: transform var(--transition-normal);
+  box-shadow: 0 2px 12px color-mix(in srgb, var(--preset-color) 35%, transparent);
+}
+
+.color-preset:hover .color-swatch {
+  transform: scale(1.15);
+}
+
+.color-preset.active .color-swatch {
+  transform: scale(1.1);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--preset-color) 50%, transparent);
+}
+
+.color-preset span {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.color-preset.active span {
+  color: var(--preset-color);
+}
+
+/* Settings Rows */
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.settings-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.settings-row:first-child {
+  padding-top: 0;
+}
+
+.settings-row-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.settings-row-info > svg {
+  font-size: 1.2rem;
+  color: var(--accent-primary);
+  flex-shrink: 0;
+}
+
+.settings-row-title {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.settings-row-desc {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* Toggle Switch */
+.toggle-switch {
+  width: 48px;
+  height: 26px;
+  border-radius: 13px;
+  background: var(--bg-card);
+  border: 2px solid var(--border-color);
+  cursor: pointer;
+  position: relative;
+  transition: all var(--transition-normal);
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.toggle-switch.on {
+  background: var(--accent-gradient);
+  border-color: transparent;
+}
+
+.toggle-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: white;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: transform var(--transition-normal);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.toggle-switch.on .toggle-thumb {
+  transform: translateX(22px);
+}
+
+/* Data Actions */
+.data-actions {
+  display: grid;
+  gap: 12px;
+}
+
+.data-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  text-align: left;
+  width: 100%;
+}
+
+.data-action-btn > svg {
+  font-size: 1.4rem;
+  flex-shrink: 0;
+}
+
+.data-action-btn.export > svg {
+  color: var(--color-info);
+}
+
+.data-action-btn.danger > svg {
+  color: var(--color-danger);
+}
+
+.data-action-btn:hover {
+  background: var(--bg-card);
+  border-color: var(--border-hover);
+}
+
+.data-action-btn.danger:hover {
+  border-color: rgba(255, 107, 107, 0.3);
+  background: rgba(255, 107, 107, 0.05);
+}
+
+.data-action-title {
+  display: block;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.data-action-desc {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* About */
+.about-card {
+  padding: 28px;
+}
+
+.about-logo {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.about-logo-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: var(--radius-md);
+  background: var(--accent-gradient);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  box-shadow: var(--accent-glow);
+}
+
+.about-logo-text h4 {
+  font-size: 1.25rem;
+  font-weight: 800;
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.about-logo-text span {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.about-desc {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+.about-tech {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tech-badge {
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  background: rgba(108, 92, 231, 0.1);
+  color: var(--accent-secondary);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .pomodoro-settings {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .color-presets {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .pomodoro-settings {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .color-presets {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

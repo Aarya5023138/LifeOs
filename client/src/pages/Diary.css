@@ -1,0 +1,262 @@
+.diary-page {
+  animation: fadeIn 0.5s ease;
+}
+
+/* Attachments */
+.diary-attachments-preview {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+.attachment-img {
+  max-width: 100%;
+  max-height: 250px;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+}
+
+.attachment-video {
+  max-width: 100%;
+  max-height: 250px;
+  border-radius: var(--radius-md);
+}
+
+.attachment-audio {
+  width: 100%;
+  max-width: 300px;
+}
+
+.document-attachments {
+  margin-top: 10px;
+}
+
+.attachment-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.attachment-input-wrapper input[type="file"] {
+  display: none;
+}
+
+.file-upload-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--bg-hover);
+  border: 1px dashed var(--border-hover);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.file-upload-btn:hover {
+  background: var(--bg-card);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.upload-count {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+/* Mood Filter Bar */
+.mood-filter-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.mood-filter-btn {
+  padding: 8px 16px;
+  border-radius: var(--radius-full);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mood-filter-btn:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-hover);
+}
+
+.mood-filter-btn.active {
+  background: rgba(108, 92, 231, 0.12);
+  border-color: var(--accent-primary);
+  color: var(--accent-secondary);
+}
+
+/* Diary Entries */
+.diary-entries {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 16px;
+}
+
+.diary-card {
+  padding: 0;
+  overflow: hidden;
+  animation: fadeIn 0.4s ease backwards;
+}
+
+.diary-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.diary-date-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.diary-day {
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text-primary);
+}
+
+.diary-month {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.diary-mood-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  border: 1px solid;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.mood-emoji-lg {
+  font-size: 1.2rem;
+}
+
+.diary-card-content {
+  padding: 16px 20px;
+}
+
+.diary-card-content p {
+  font-size: 0.875rem;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+}
+
+.diary-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 0 20px 12px;
+}
+
+.diary-tag {
+  font-size: 0.7rem;
+  color: var(--accent-secondary);
+  background: rgba(108, 92, 231, 0.1);
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-weight: 600;
+}
+
+.diary-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  border-top: 1px solid var(--border-color);
+}
+
+.diary-time {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.diary-card-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.diary-card:hover .diary-card-actions {
+  opacity: 1;
+}
+
+/* Mood Selector in Modal */
+.mood-selector {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mood-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  border: 2px solid var(--border-color);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  flex: 1;
+  min-width: 70px;
+}
+
+.mood-option:hover {
+  border-color: var(--border-hover);
+  transform: translateY(-2px);
+}
+
+.mood-option.selected {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.mood-emoji-select {
+  font-size: 1.5rem;
+}
+
+.mood-label-select {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 768px) {
+  .diary-entries { grid-template-columns: 1fr; }
+  .mood-selector { gap: 6px; }
+  .mood-option { padding: 8px 10px; min-width: 56px; }
+}
