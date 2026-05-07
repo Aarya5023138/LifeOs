@@ -47,44 +47,56 @@ cron.schedule('* * * * *', () => {
   processRecurringReminders();
 });
 
-// Connect to MongoDB - try local first, then fall back to in-memory
-async function startServer() {
-  let connected = false;
-
-  // Try connecting to local MongoDB
-  try {
-    await mongoose.connect(process.env.MONGODB_URI, {
-      serverSelectionTimeoutMS: 3000,
-    });
-    console.log('✅ Connected to local MongoDB');
-    connected = true;
-  } catch (err) {
-    console.log('⚠️  Local MongoDB not available:', err.message);
+// Connect to MongoDB
+const connectDB = async () => {
+  if (mongoose.connection.readyState >= 1) {
+    return;
+  }
+  
+  if (process.env.MONGODB_URI) {
+    try {
+      await mongoose.connect(process.env.MONGODB_URI, {
+        serverSelectionTimeoutMS: 5000,
+      });
+      console.log('✅ Connected to MongoDB');
+      return;
+    } catch (err) {
+      console.error('⚠️  MongoDB connection error:', err.message);
+    }
   }
 
-  // Fall back to in-memory MongoDB
-  if (!connected) {
+  // Fallback to in-memory only in development
+  if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
     try {
       const { MongoMemoryServer } = require('mongodb-memory-server');
-      console.log('🔄 Starting in-memory MongoDB (first run may take a moment to download binary)...');
+      console.log('🔄 Starting in-memory MongoDB (first run takes time)...');
       const mongod = await MongoMemoryServer.create();
       const uri = mongod.getUri();
       await mongoose.connect(uri);
       console.log('✅ Connected to in-memory MongoDB');
-      console.log('💡 Note: Data will be lost when server stops. Install MongoDB locally for persistence.');
-      connected = true;
-    } catch (err2) {
-      console.error('❌ Could not start in-memory MongoDB:', err2.message);
-      console.log('⚠️  Server starting without database - API calls will fail');
+      console.log('💡 Note: Data is lost on restart. Set MONGODB_URI for persistence.');
+    } catch (err) {
+      console.error('❌ Could not start in-memory MongoDB:', err.message);
     }
+  } else {
+    console.warn('⚠️  No MONGODB_URI provided in production. Database will not connect.');
   }
+};
 
-  app.listen(PORT, () => {
-    console.log(`🚀 LifeOS server running on http://localhost:${PORT}`);
-    if (!connected) {
-      console.log('⚠️  No database connected. Install MongoDB or run: npm install mongodb-memory-server');
-    }
+// Add DB connection middleware for serverless environments (like Vercel)
+app.use(async (req, res, next) => {
+  await connectDB();
+  next();
+});
+
+// Start server if not running in a serverless environment
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+  connectDB().then(() => {
+    app.listen(PORT, () => {
+      console.log(`🚀 LifeOS server running on http://localhost:${PORT}`);
+    });
   });
 }
 
-startServer();
+// Export the app for Vercel Serverless
+module.exports = app;

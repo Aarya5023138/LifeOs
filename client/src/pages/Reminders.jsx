@@ -1,28 +1,114 @@
-import { useState, useEffect } from 'react';
-import { HiOutlinePlus, HiOutlineTrash, HiOutlineBell, HiOutlineX, HiOutlineRefresh } from 'react-icons/hi';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  HiOutlinePlus, HiOutlineTrash, HiOutlineBell,
+  HiOutlineX, HiOutlineRefresh,
+} from 'react-icons/hi';
 import { HiOutlineBellSlash } from 'react-icons/hi2';
 import toast from 'react-hot-toast';
 import { reminderAPI } from '../api';
 import './Reminders.css';
 
+// ─── Web Audio bell sound ────────────────────────────────────────────────────
+function playBellSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const times = [0, 0.35, 0.7];
+    times.forEach((t) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime + t);
+      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + t + 0.4);
+      gain.gain.setValueAtTime(0.6, ctx.currentTime + t);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.6);
+      osc.start(ctx.currentTime + t);
+      osc.stop(ctx.currentTime + t + 0.7);
+    });
+  } catch (_) { /* silently ignore if AudioContext blocked */ }
+}
+
+// ─── Browser push notification ───────────────────────────────────────────────
+function sendBrowserNotification(title, body) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  new Notification(`🔔 ${title}`, {
+    body: body || 'Your reminder is due!',
+    icon: '/favicon.ico',
+    badge: '/favicon.ico',
+  });
+}
+
+// ─── Recurring label map ──────────────────────────────────────────────────────
+const PATTERN_LABELS = {
+  daily:   'Daily',
+  weekly:  'Weekly',
+  monthly: '1 Month',
+  '3month':'3 Months',
+  '6month':'6 Months',
+  yearly:  '1 Year',
+  none:    '',
+};
+
 export default function Reminders() {
-  const [reminders, setReminders] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
+  const [reminders, setReminders]         = useState([]);
+  const [loading, setLoading]             = useState(true);
+  const [showModal, setShowModal]         = useState(false);
+  const [notifPermission, setNotifPermission] = useState(
+    'Notification' in window ? Notification.permission : 'denied'
+  );
+  const [firingReminder, setFiringReminder] = useState(null); // active alert popup
+  const pollingRef = useRef(null);
+
   const [form, setForm] = useState({
-    title: '', description: '', date: '', time: '', isRecurring: false, recurringPattern: 'none',
+    title: '', description: '', date: '', time: '',
+    isRecurring: false, recurringPattern: 'none',
   });
 
-  useEffect(() => { loadReminders(); }, []);
+  // ── Request notification permission on mount ───────────────────────────────
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().then(setNotifPermission);
+    }
+  }, []);
 
-  const loadReminders = async () => {
+  // ── Load reminders ─────────────────────────────────────────────────────────
+  const loadReminders = useCallback(async () => {
     try {
       const res = await reminderAPI.getAll();
       setReminders(res.data);
     } catch { setReminders([]); }
     finally { setLoading(false); }
-  };
+  }, []);
 
+  useEffect(() => { loadReminders(); }, [loadReminders]);
+
+  // ── Poll /due every 30 s ───────────────────────────────────────────────────
+  const checkDue = useCallback(async () => {
+    try {
+      const res = await reminderAPI.getDue();
+      const dueList = res.data;
+      if (dueList.length > 0) {
+        // fire for the first one (queue rest if needed)
+        dueList.forEach((r, i) => {
+          setTimeout(() => {
+            playBellSound();
+            sendBrowserNotification(r.title, r.description);
+            setFiringReminder(r);
+          }, i * 1500);
+        });
+        loadReminders(); // refresh list after advancing recurring times
+      }
+    } catch { /* silently fail */ }
+  }, [loadReminders]);
+
+  useEffect(() => {
+    pollingRef.current = setInterval(checkDue, 30_000);
+    checkDue(); // also run immediately on mount
+    return () => clearInterval(pollingRef.current);
+  }, [checkDue]);
+
+  // ── Create reminder ────────────────────────────────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.title.trim()) return toast.error('Title is required');
@@ -39,6 +125,7 @@ export default function Reminders() {
     }
   };
 
+  // ── Toggle active ──────────────────────────────────────────────────────────
   const toggleActive = async (reminder) => {
     try {
       await reminderAPI.update(reminder._id, { isActive: !reminder.isActive });
@@ -47,6 +134,7 @@ export default function Reminders() {
     } catch { toast.error('Error updating reminder'); }
   };
 
+  // ── Delete ─────────────────────────────────────────────────────────────────
   const handleDelete = async (id) => {
     try {
       await reminderAPI.delete(id);
@@ -55,42 +143,87 @@ export default function Reminders() {
     } catch { toast.error('Error deleting reminder'); }
   };
 
+  // ── Helpers ────────────────────────────────────────────────────────────────
   const now = new Date();
   const upcoming = reminders.filter(r => new Date(r.dateTime) >= now && r.isActive);
-  const past = reminders.filter(r => new Date(r.dateTime) < now || !r.isActive);
+  const past     = reminders.filter(r => new Date(r.dateTime) <  now || !r.isActive);
 
   const formatDateTime = (dt) => {
     const d = new Date(dt);
-    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleDateString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
   };
 
   const getTimeUntil = (dt) => {
     const diff = new Date(dt) - now;
     if (diff < 0) return 'Past';
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const days = Math.floor(hours / 24);
-    if (days > 0) return `in ${days}d ${hours % 24}h`;
-    if (hours > 0) return `in ${hours}h`;
-    const mins = Math.floor(diff / (1000 * 60));
+    const mins  = Math.floor(diff / 60_000);
+    const hours = Math.floor(mins / 60);
+    const days  = Math.floor(hours / 24);
+    if (days  > 0) return `in ${days}d ${hours % 24}h`;
+    if (hours > 0) return `in ${hours}h ${mins % 60}m`;
     return `in ${mins}m`;
   };
 
-  const patternLabels = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly', none: '' };
+  const requestPermission = async () => {
+    const p = await Notification.requestPermission();
+    setNotifPermission(p);
+    if (p === 'granted') toast.success('Notifications enabled! 🔔');
+    else toast.error('Notifications blocked by browser');
+  };
+
+  // ── Dismiss the firing overlay ─────────────────────────────────────────────
+  const dismissAlert = () => setFiringReminder(null);
 
   return (
     <div className="reminders-page">
+
+      {/* ─── Ringing alert overlay ─────────────────────────────────────────── */}
+      {firingReminder && (
+        <div className="reminder-alert-overlay">
+          <div className="reminder-alert-box">
+            <div className="reminder-alert-bell">🔔</div>
+            <h2>{firingReminder.title}</h2>
+            {firingReminder.description && <p>{firingReminder.description}</p>}
+            <div className="reminder-alert-time">{formatDateTime(firingReminder.dateTime)}</div>
+            <button className="btn-primary" onClick={dismissAlert}>Dismiss</button>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Header ────────────────────────────────────────────────────────── */}
       <div className="page-header">
         <div>
           <h1>Reminders</h1>
           <p className="subtitle">{upcoming.length} upcoming · {past.length} past</p>
         </div>
-        <button className="btn-primary" onClick={() => setShowModal(true)}>
-          <HiOutlinePlus /> New Reminder
-        </button>
+        <div className="header-actions">
+          {notifPermission !== 'granted' && (
+            <button className="btn-notif-enable" onClick={requestPermission} title="Enable browser notifications">
+              <HiOutlineBell /> Enable Notifications
+            </button>
+          )}
+          <button className="btn-primary" onClick={() => setShowModal(true)}>
+            <HiOutlinePlus /> New Reminder
+          </button>
+        </div>
       </div>
 
+      {/* ─── Notification permission banner ────────────────────────────────── */}
+      {notifPermission === 'denied' && (
+        <div className="notif-banner">
+          ⚠️ Browser notifications are blocked. Reminders will still ring in-app, but you won't
+          receive desktop alerts when this tab is in the background.
+        </div>
+      )}
+
+      {/* ─── Content ───────────────────────────────────────────────────────── */}
       {loading ? (
-        <div className="card-grid">{[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 100 }} />)}</div>
+        <div className="card-grid">
+          {[1, 2, 3].map(i => <div key={i} className="skeleton" style={{ height: 100 }} />)}
+        </div>
       ) : reminders.length === 0 ? (
         <div className="empty-state">
           <div className="icon">🔔</div>
@@ -105,10 +238,12 @@ export default function Reminders() {
               <h3 className="reminder-section-title">🔔 Upcoming</h3>
               <div className="reminder-list">
                 {upcoming.map((reminder, idx) => (
-                  <div key={reminder._id} className="reminder-card glass-card" style={{ animationDelay: `${idx * 0.05}s` }}>
-                    <div className="reminder-bell active">
-                      <HiOutlineBell />
-                    </div>
+                  <div
+                    key={reminder._id}
+                    className="reminder-card glass-card"
+                    style={{ animationDelay: `${idx * 0.05}s` }}
+                  >
+                    <div className="reminder-bell active"><HiOutlineBell /></div>
                     <div className="reminder-info">
                       <h4>{reminder.title}</h4>
                       {reminder.description && <p className="reminder-desc">{reminder.description}</p>}
@@ -117,7 +252,7 @@ export default function Reminders() {
                         <span className="reminder-countdown">{getTimeUntil(reminder.dateTime)}</span>
                         {reminder.isRecurring && (
                           <span className="reminder-recurring">
-                            <HiOutlineRefresh /> {patternLabels[reminder.recurringPattern]}
+                            <HiOutlineRefresh /> {PATTERN_LABELS[reminder.recurringPattern]}
                           </span>
                         )}
                       </div>
@@ -136,30 +271,32 @@ export default function Reminders() {
             </div>
           )}
 
-          {/* Past */}
+          {/* Past / Muted */}
           {past.length > 0 && (
             <div className="reminder-section">
               <h3 className="reminder-section-title past">🔕 Past / Muted</h3>
               <div className="reminder-list">
                 {past.map((reminder, idx) => (
-                  <div key={reminder._id} className="reminder-card glass-card past" style={{ animationDelay: `${idx * 0.05}s` }}>
-                    <div className="reminder-bell muted">
-                      <HiOutlineBellSlash />
-                    </div>
+                  <div
+                    key={reminder._id}
+                    className="reminder-card glass-card past"
+                    style={{ animationDelay: `${idx * 0.05}s` }}
+                  >
+                    <div className="reminder-bell muted"><HiOutlineBellSlash /></div>
                     <div className="reminder-info">
                       <h4>{reminder.title}</h4>
                       <div className="reminder-meta">
                         <span className="reminder-time">{formatDateTime(reminder.dateTime)}</span>
                         {reminder.isRecurring && (
                           <span className="reminder-recurring">
-                            <HiOutlineRefresh /> {patternLabels[reminder.recurringPattern]}
+                            <HiOutlineRefresh /> {PATTERN_LABELS[reminder.recurringPattern]}
                           </span>
                         )}
                       </div>
                     </div>
                     <div className="reminder-actions">
                       {!reminder.isActive && (
-                        <button className="btn-icon" onClick={() => toggleActive(reminder)} title="Activate">
+                        <button className="btn-icon" onClick={() => toggleActive(reminder)} title="Re-activate">
                           <HiOutlineBell />
                         </button>
                       )}
@@ -175,46 +312,84 @@ export default function Reminders() {
         </>
       )}
 
-      {/* Modal */}
+      {/* ─── Create modal ──────────────────────────────────────────────────── */}
       {showModal && (
         <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && setShowModal(false)}>
           <div className="modal-content">
-            <h2>New Reminder</h2>
+            <h2>🔔 New Reminder</h2>
             <form onSubmit={handleSubmit}>
               <div className="form-group">
                 <label>Title</label>
-                <input type="text" placeholder="Reminder title" value={form.title} onChange={(e) => setForm(prev => ({ ...prev, title: e.target.value }))} autoFocus />
+                <input
+                  type="text" placeholder="Reminder title" autoFocus
+                  value={form.title}
+                  onChange={(e) => setForm(p => ({ ...p, title: e.target.value }))}
+                />
               </div>
               <div className="form-group">
                 <label>Description</label>
-                <textarea placeholder="Details..." value={form.description} onChange={(e) => setForm(prev => ({ ...prev, description: e.target.value }))} rows={2} />
+                <textarea
+                  placeholder="Details (optional)..."
+                  value={form.description}
+                  onChange={(e) => setForm(p => ({ ...p, description: e.target.value }))}
+                  rows={2}
+                />
               </div>
               <div className="form-row">
                 <div className="form-group">
                   <label>Date</label>
-                  <input type="date" value={form.date} onChange={(e) => setForm(prev => ({ ...prev, date: e.target.value }))} />
+                  <input
+                    type="date"
+                    value={form.date}
+                    onChange={(e) => setForm(p => ({ ...p, date: e.target.value }))}
+                  />
                 </div>
                 <div className="form-group">
                   <label>Time</label>
-                  <input type="time" value={form.time} onChange={(e) => setForm(prev => ({ ...prev, time: e.target.value }))} />
+                  <input
+                    type="time"
+                    value={form.time}
+                    onChange={(e) => setForm(p => ({ ...p, time: e.target.value }))}
+                  />
                 </div>
               </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Recurring</label>
-                  <select value={form.recurringPattern} onChange={(e) => setForm(prev => ({ ...prev, recurringPattern: e.target.value, isRecurring: e.target.value !== 'none' }))}>
-                    <option value="none">No repeat</option>
-                    <option value="daily">Daily</option>
-                    <option value="weekly">Weekly</option>
-                    <option value="monthly">Monthly</option>
-                    <option value="yearly">Yearly</option>
-                  </select>
+
+              {/* Recurring pattern ─ includes 1m / 3m / 6m / 1yr */}
+              <div className="form-group">
+                <label>Repeat</label>
+                <div className="repeat-grid">
+                  {[
+                    { value: 'none',    label: 'No repeat' },
+                    { value: 'daily',   label: 'Daily' },
+                    { value: 'weekly',  label: 'Weekly' },
+                    { value: 'monthly', label: '1 Month' },
+                    { value: '3month',  label: '3 Months' },
+                    { value: '6month',  label: '6 Months' },
+                    { value: 'yearly',  label: '1 Year' },
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      className={`repeat-chip ${form.recurringPattern === opt.value ? 'active' : ''}`}
+                      onClick={() => setForm(p => ({
+                        ...p,
+                        recurringPattern: opt.value,
+                        isRecurring: opt.value !== 'none',
+                      }))}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
                 </div>
-                <div className="form-group"></div>
               </div>
+
               <div className="modal-actions">
-                <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}><HiOutlineX /> Cancel</button>
-                <button type="submit" className="btn-primary"><HiOutlinePlus /> Set Reminder</button>
+                <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>
+                  <HiOutlineX /> Cancel
+                </button>
+                <button type="submit" className="btn-primary">
+                  <HiOutlineBell /> Set Reminder
+                </button>
               </div>
             </form>
           </div>

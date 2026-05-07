@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+const API_BASE = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '/api' : 'http://localhost:5001/api');
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -18,10 +18,11 @@ export const taskAPI = {
 
 // Reminders
 export const reminderAPI = {
-  getAll: (params) => api.get('/reminders', { params }),
-  create: (data) => api.post('/reminders', data),
-  update: (id, data) => api.put(`/reminders/${id}`, data),
-  delete: (id) => api.delete(`/reminders/${id}`),
+  getAll:  (params) => api.get('/reminders', { params }),
+  getDue:  ()       => api.get('/reminders/due'),
+  create:  (data)   => api.post('/reminders', data),
+  update:  (id, data) => api.put(`/reminders/${id}`, data),
+  delete:  (id)     => api.delete(`/reminders/${id}`),
 };
 
 // Calendar
