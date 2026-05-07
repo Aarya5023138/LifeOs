@@ -5,7 +5,35 @@ const API_BASE = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '/api' 
 const api = axios.create({
   baseURL: API_BASE,
   headers: { 'Content-Type': 'application/json' },
+  timeout: 30000, // 30s timeout for cold starts
 });
+
+// ── Retry interceptor for Vercel cold starts ─────────────────────────────────
+// Serverless cold starts can cause the first request to fail or timeout.
+// This retries failed requests up to 2 times with increasing delay.
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const config = error.config;
+    if (!config) return Promise.reject(error);
+
+    config._retryCount = config._retryCount || 0;
+
+    // Retry on network errors, 502/503/504 (cold start errors), but not on 4xx
+    const isRetryable =
+      !error.response ||
+      [502, 503, 504].includes(error.response?.status);
+
+    if (isRetryable && config._retryCount < 2) {
+      config._retryCount += 1;
+      const delay = config._retryCount * 1500; // 1.5s, 3s
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return api.request(config);
+    }
+
+    return Promise.reject(error);
+  }
+);
 
 // Tasks
 export const taskAPI = {

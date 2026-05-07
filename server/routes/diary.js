@@ -70,7 +70,7 @@ router.post('/', upload.array('attachments', 5), async (req, res) => {
     gamification.totalXP += 15;
     gamification.diaryEntries += 1;
     gamification.calculateLevel();
-    gamification.updateStreak();
+    gamification.recordActivity();
 
     // Achievement check
     const diaryAchievements = [

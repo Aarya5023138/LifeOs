@@ -22,6 +22,12 @@ async function processRecurringReminders() {
         case 'monthly':
           nextDate.setMonth(nextDate.getMonth() + 1);
           break;
+        case '3month':
+          nextDate.setMonth(nextDate.getMonth() + 3);
+          break;
+        case '6month':
+          nextDate.setMonth(nextDate.getMonth() + 6);
+          break;
         case 'yearly':
           nextDate.setFullYear(nextDate.getFullYear() + 1);
           break;
@@ -31,6 +37,7 @@ async function processRecurringReminders() {
       
       reminder.dateTime = nextDate;
       reminder.lastTriggered = now;
+      reminder.notified = false;
       await reminder.save();
     }
   } catch (err) {
