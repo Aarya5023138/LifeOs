@@ -20,7 +20,9 @@ export default function Login() {
       await login(email, password);
       toast.success('Welcome back! 🎉');
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Login failed');
+      const msg = err.response?.data?.error
+        || (err.response ? `Server error (${err.response.status})` : 'Network error — is the server running?');
+      toast.error(msg);
     } finally {
       setLoading(false);
     }

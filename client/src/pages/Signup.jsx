@@ -24,7 +24,9 @@ export default function Signup() {
       await signup(name, email, password);
       toast.success('Account created! Welcome to LifeOS 🚀');
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Signup failed');
+      const msg = err.response?.data?.error
+        || (err.response ? `Server error (${err.response.status})` : 'Network error — is the server running?');
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
