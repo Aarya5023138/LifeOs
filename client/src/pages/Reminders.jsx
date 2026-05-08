@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   HiOutlinePlus, HiOutlineTrash, HiOutlineBell,
   HiOutlineX, HiOutlineRefresh,
@@ -7,37 +7,6 @@ import { HiOutlineBellSlash } from 'react-icons/hi2';
 import toast from 'react-hot-toast';
 import { reminderAPI } from '../api';
 import './Reminders.css';
-
-// ─── Web Audio bell sound ────────────────────────────────────────────────────
-function playBellSound() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const times = [0, 0.35, 0.7];
-    times.forEach((t) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, ctx.currentTime + t);
-      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + t + 0.4);
-      gain.gain.setValueAtTime(0.6, ctx.currentTime + t);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.6);
-      osc.start(ctx.currentTime + t);
-      osc.stop(ctx.currentTime + t + 0.7);
-    });
-  } catch (_) { /* silently ignore if AudioContext blocked */ }
-}
-
-// ─── Browser push notification ───────────────────────────────────────────────
-function sendBrowserNotification(title, body) {
-  if (!('Notification' in window) || Notification.permission !== 'granted') return;
-  new Notification(`🔔 ${title}`, {
-    body: body || 'Your reminder is due!',
-    icon: '/favicon.ico',
-    badge: '/favicon.ico',
-  });
-}
 
 // ─── Recurring label map ──────────────────────────────────────────────────────
 const PATTERN_LABELS = {
@@ -57,8 +26,6 @@ export default function Reminders() {
   const [notifPermission, setNotifPermission] = useState(
     'Notification' in window ? Notification.permission : 'denied'
   );
-  const [firingReminder, setFiringReminder] = useState(null); // active alert popup
-  const pollingRef = useRef(null);
 
   const [form, setForm] = useState({
     title: '', description: '', date: '', time: '',
@@ -83,30 +50,12 @@ export default function Reminders() {
 
   useEffect(() => { loadReminders(); }, [loadReminders]);
 
-  // ── Poll /due every 30 s ───────────────────────────────────────────────────
-  const checkDue = useCallback(async () => {
-    try {
-      const res = await reminderAPI.getDue();
-      const dueList = res.data;
-      if (dueList.length > 0) {
-        // fire for the first one (queue rest if needed)
-        dueList.forEach((r, i) => {
-          setTimeout(() => {
-            playBellSound();
-            sendBrowserNotification(r.title, r.description);
-            setFiringReminder(r);
-          }, i * 1500);
-        });
-        loadReminders(); // refresh list after advancing recurring times
-      }
-    } catch { /* silently fail */ }
-  }, [loadReminders]);
-
+  // ── Listen for global alarm events (fired from App.jsx) to refresh list ────
   useEffect(() => {
-    pollingRef.current = setInterval(checkDue, 30_000);
-    checkDue(); // also run immediately on mount
-    return () => clearInterval(pollingRef.current);
-  }, [checkDue]);
+    const handler = () => loadReminders();
+    window.addEventListener('reminders-updated', handler);
+    return () => window.removeEventListener('reminders-updated', handler);
+  }, [loadReminders]);
 
   // ── Create reminder ────────────────────────────────────────────────────────
   const handleSubmit = async (e) => {
@@ -143,6 +92,47 @@ export default function Reminders() {
     } catch { toast.error('Error deleting reminder'); }
   };
 
+  // ── Test alarm — manually triggers one alarm cycle + notification ──────────
+  const handleTestAlarm = () => {
+    // Play the alarm sound (will create/resume AudioContext since this is a user gesture)
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const t = ctx.currentTime;
+      const pattern = [
+        { freq: 880, start: 0, dur: 0.12 },
+        { freq: 660, start: 0.18, dur: 0.12 },
+        { freq: 880, start: 0.36, dur: 0.12 },
+        { freq: 660, start: 0.54, dur: 0.12 },
+        { freq: 880, start: 0.72, dur: 0.12 },
+        { freq: 660, start: 0.90, dur: 0.12 },
+      ];
+      pattern.forEach(({ freq, start, dur }) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(freq, t + start);
+        gain.gain.setValueAtTime(0.7, t + start);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + start + dur);
+        osc.start(t + start);
+        osc.stop(t + start + dur + 0.02);
+      });
+      // Close context after sound finishes
+      setTimeout(() => ctx.close(), 2000);
+    } catch (_) {}
+
+    // Send a test browser notification
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('🔔 Test Alarm', {
+        body: 'Your alarm and notifications are working!',
+        icon: '/favicon.ico',
+      });
+    }
+
+    toast.success('🔔 Alarm test played! Check your speakers.');
+  };
+
   // ── Helpers ────────────────────────────────────────────────────────────────
   const now = new Date();
   const upcoming = reminders.filter(r => new Date(r.dateTime) >= now && r.isActive);
@@ -174,24 +164,8 @@ export default function Reminders() {
     else toast.error('Notifications blocked by browser');
   };
 
-  // ── Dismiss the firing overlay ─────────────────────────────────────────────
-  const dismissAlert = () => setFiringReminder(null);
-
   return (
     <div className="reminders-page">
-
-      {/* ─── Ringing alert overlay ─────────────────────────────────────────── */}
-      {firingReminder && (
-        <div className="reminder-alert-overlay">
-          <div className="reminder-alert-box">
-            <div className="reminder-alert-bell">🔔</div>
-            <h2>{firingReminder.title}</h2>
-            {firingReminder.description && <p>{firingReminder.description}</p>}
-            <div className="reminder-alert-time">{formatDateTime(firingReminder.dateTime)}</div>
-            <button className="btn-primary" onClick={dismissAlert}>Dismiss</button>
-          </div>
-        </div>
-      )}
 
       {/* ─── Header ────────────────────────────────────────────────────────── */}
       <div className="page-header">
@@ -205,6 +179,9 @@ export default function Reminders() {
               <HiOutlineBell /> Enable Notifications
             </button>
           )}
+          <button className="btn-test-alarm" onClick={handleTestAlarm} title="Test alarm sound & notification">
+            🔊 Test Alarm
+          </button>
           <button className="btn-primary" onClick={() => setShowModal(true)}>
             <HiOutlinePlus /> New Reminder
           </button>
@@ -214,8 +191,8 @@ export default function Reminders() {
       {/* ─── Notification permission banner ────────────────────────────────── */}
       {notifPermission === 'denied' && (
         <div className="notif-banner">
-          ⚠️ Browser notifications are blocked. Reminders will still ring in-app, but you won't
-          receive desktop alerts when this tab is in the background.
+          ⚠️ Browser notifications are blocked. Go to your browser settings to allow notifications
+          for this site. Reminders will still ring in-app with alarm sounds.
         </div>
       )}
 
@@ -229,6 +206,9 @@ export default function Reminders() {
           <div className="icon">🔔</div>
           <h3>No reminders</h3>
           <p>Set reminders to never miss important moments</p>
+          <button className="btn-primary" style={{ marginTop: 16 }} onClick={() => setShowModal(true)}>
+            <HiOutlinePlus /> Create Your First Reminder
+          </button>
         </div>
       ) : (
         <>

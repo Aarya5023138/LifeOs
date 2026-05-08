@@ -18,34 +18,104 @@ const Notes = lazy(() => import('./pages/Notes'));
 const Habits = lazy(() => import('./pages/Habits'));
 const Settings = lazy(() => import('./pages/Settings'));
 
-// ── Web Audio bell sound ─────────────────────────────────────────────────────
-function playBellSound() {
+// ─────────────────────────────────────────────────────────────────────────────
+// ALARM SOUND ENGINE — persistent, loud alarm that loops until dismissed
+// ─────────────────────────────────────────────────────────────────────────────
+let _alarmCtx = null;       // reusable AudioContext (unlocked on first user click)
+let _alarmInterval = null;  // repeating cycle id
+let _alarmOscillators = []; // active oscillator nodes for cleanup
+
+// Unlock AudioContext on very first user gesture so future programmatic
+// calls (from setInterval) can actually produce sound.
+function ensureAudioContext() {
+  if (!_alarmCtx) {
+    _alarmCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (_alarmCtx.state === 'suspended') {
+    _alarmCtx.resume();
+  }
+  return _alarmCtx;
+}
+
+// One-shot listener: unlock audio on first click/touch/keydown anywhere
+function unlockAudioOnGesture() {
+  function handler() {
+    ensureAudioContext();
+    window.removeEventListener('click', handler, true);
+    window.removeEventListener('touchstart', handler, true);
+    window.removeEventListener('keydown', handler, true);
+  }
+  window.addEventListener('click', handler, true);
+  window.addEventListener('touchstart', handler, true);
+  window.addEventListener('keydown', handler, true);
+}
+unlockAudioOnGesture();
+
+/** Play one alarm "cycle" — a two-tone siren pattern (~1.2 s) */
+function playAlarmCycle() {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const times = [0, 0.35, 0.7];
-    times.forEach((t) => {
+    const ctx = ensureAudioContext();
+    if (ctx.state === 'closed') return;
+
+    const t = ctx.currentTime;
+    // Two-tone siren: 6 beeps alternating high/low
+    const pattern = [
+      { freq: 880, start: 0,    dur: 0.12 },
+      { freq: 660, start: 0.18, dur: 0.12 },
+      { freq: 880, start: 0.36, dur: 0.12 },
+      { freq: 660, start: 0.54, dur: 0.12 },
+      { freq: 880, start: 0.72, dur: 0.12 },
+      { freq: 660, start: 0.90, dur: 0.12 },
+    ];
+
+    pattern.forEach(({ freq, start, dur }) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain);
       gain.connect(ctx.destination);
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, ctx.currentTime + t);
-      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + t + 0.4);
-      gain.gain.setValueAtTime(0.6, ctx.currentTime + t);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.6);
-      osc.start(ctx.currentTime + t);
-      osc.stop(ctx.currentTime + t + 0.7);
+      osc.type = 'square'; // harsh / alarm-like
+      osc.frequency.setValueAtTime(freq, t + start);
+      gain.gain.setValueAtTime(0.7, t + start);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + start + dur);
+      osc.start(t + start);
+      osc.stop(t + start + dur + 0.02);
+      _alarmOscillators.push(osc);
     });
-  } catch (_) { /* silently ignore */ }
+  } catch (_) { /* silently fail if no audio support */ }
 }
 
-// ── Browser push notification ────────────────────────────────────────────────
+/** Start persistent alarm — loops until stopAlarmSound() is called */
+function startAlarmSound() {
+  stopAlarmSound(); // prevent stacking
+  playAlarmCycle();
+  _alarmInterval = setInterval(playAlarmCycle, 1400); // repeat every 1.4s
+}
+
+/** Silence the alarm */
+function stopAlarmSound() {
+  if (_alarmInterval) {
+    clearInterval(_alarmInterval);
+    _alarmInterval = null;
+  }
+  _alarmOscillators.forEach((osc) => {
+    try { osc.stop(); } catch (_) {}
+  });
+  _alarmOscillators = [];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BROWSER NOTIFICATION
+// ─────────────────────────────────────────────────────────────────────────────
 function sendBrowserNotification(title, body) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
-  new Notification(`🔔 ${title}`, {
-    body: body || 'Your reminder is due!',
-    icon: '/favicon.ico',
-  });
+  try {
+    new Notification(`🔔 ${title}`, {
+      body: body || 'Your reminder is due!',
+      icon: '/favicon.ico',
+      badge: '/favicon.ico',
+      requireInteraction: true, // stays visible until user dismisses
+    });
+  } catch (_) {}
 }
 
 // ── Page loading spinner ─────────────────────────────────────────────────────
@@ -111,7 +181,9 @@ function App() {
   const [apiReady, setApiReady] = useState(false);
   const [warmupProgress, setWarmupProgress] = useState(10);
   const [firingReminder, setFiringReminder] = useState(null);
+  const [reminderQueue, setReminderQueue] = useState([]);  // queue of due reminders
   const pollingRef = useRef(null);
+  const alarmActiveRef = useRef(false);
 
   // ── Warmup: ping the API to wake the serverless function ───────────────────
   useEffect(() => {
@@ -141,24 +213,63 @@ function App() {
     return () => { cancelled = true; };
   }, []);
 
-  // ── Global reminder polling — works from ANY page ──────────────────────────
+  // ── Dismiss current alarm and show next in queue (or close) ────────────────
+  const dismissAlarm = useCallback(() => {
+    stopAlarmSound();
+    alarmActiveRef.current = false;
+
+    setReminderQueue((prev) => {
+      const rest = prev.slice(1);
+      if (rest.length > 0) {
+        // Show next reminder in queue, restart alarm
+        setFiringReminder(rest[0]);
+        startAlarmSound();
+        alarmActiveRef.current = true;
+      } else {
+        setFiringReminder(null);
+      }
+      return rest;
+    });
+  }, []);
+
+  // ── Global reminder polling — works from ANY page, every 10s ───────────────
   const checkDueReminders = useCallback(async () => {
+    // Don't poll while an alarm is active (avoid stacking)
+    if (alarmActiveRef.current) return;
+
     try {
       const res = await reminderAPI.getDue();
       const dueList = res.data;
       if (dueList.length > 0) {
+        // Queue all due reminders, fire the first one
+        setReminderQueue(dueList);
+        setFiringReminder(dueList[0]);
+        startAlarmSound();
+        alarmActiveRef.current = true;
+
+        // Send browser notifications for all
+        dueList.forEach((r) => {
+          sendBrowserNotification(r.title, r.description);
+        });
+
+        // Show toast as well (visible even if overlay is missed)
         dueList.forEach((r, i) => {
           setTimeout(() => {
-            playBellSound();
-            sendBrowserNotification(r.title, r.description);
-            setFiringReminder(r);
             toast(`🔔 ${r.title}`, {
-              duration: 6000,
+              duration: 8000,
               icon: '⏰',
-              style: { background: '#1a1a2e', color: '#e8e8f0', border: '1px solid rgba(108,92,231,0.3)' },
+              style: {
+                background: '#1a1a2e',
+                color: '#e8e8f0',
+                border: '1px solid rgba(255, 107, 107, 0.5)',
+                fontWeight: '600',
+              },
             });
-          }, i * 1500);
+          }, i * 800);
         });
+
+        // Tell the Reminders page to refresh its list
+        window.dispatchEvent(new CustomEvent('reminders-updated'));
       }
     } catch { /* silently fail */ }
   }, []);
@@ -171,9 +282,9 @@ function App() {
       Notification.requestPermission();
     }
 
-    // Check immediately on app load, then every 30s
+    // Check immediately on app load, then every 10 seconds
     checkDueReminders();
-    pollingRef.current = setInterval(checkDueReminders, 30_000);
+    pollingRef.current = setInterval(checkDueReminders, 10_000);
 
     return () => clearInterval(pollingRef.current);
   }, [apiReady, checkDueReminders]);
@@ -237,15 +348,26 @@ function App() {
         }}
       />
 
-      {/* Global reminder alert overlay — fires from ANY page */}
+      {/* ── Full-screen alarm overlay — fires from ANY page ─────────────────── */}
       {firingReminder && (
         <div className="global-reminder-overlay">
           <div className="global-reminder-box">
+            <div className="global-reminder-pulse-ring" />
             <div className="global-reminder-bell">🔔</div>
-            <h2>{firingReminder.title}</h2>
-            {firingReminder.description && <p>{firingReminder.description}</p>}
+            <h2>Reminder!</h2>
+            <h3 className="global-reminder-title">{firingReminder.title}</h3>
+            {firingReminder.description && (
+              <p className="global-reminder-desc">{firingReminder.description}</p>
+            )}
             <div className="global-reminder-time">{formatDateTime(firingReminder.dateTime)}</div>
-            <button className="btn-primary" onClick={() => setFiringReminder(null)}>Dismiss</button>
+            {reminderQueue.length > 1 && (
+              <div className="global-reminder-queue-badge">
+                +{reminderQueue.length - 1} more reminder{reminderQueue.length > 2 ? 's' : ''}
+              </div>
+            )}
+            <button className="btn-dismiss-alarm" onClick={dismissAlarm}>
+              🔕 Stop Alarm
+            </button>
           </div>
         </div>
       )}
