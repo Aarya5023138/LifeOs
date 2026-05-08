@@ -5,6 +5,10 @@ const Gamification = require('../models/Gamification');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const auth = require('../middleware/auth');
+
+// All diary routes require authentication
+router.use(auth);
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -20,7 +24,7 @@ const upload = multer({ storage });
 router.get('/', async (req, res) => {
   try {
     const { mood, startDate, endDate } = req.query;
-    const filter = {};
+    const filter = { userId: req.userId };
     if (mood) filter.mood = mood;
     if (startDate && endDate) {
       filter.date = { $gte: new Date(startDate), $lte: new Date(endDate) };
@@ -36,6 +40,7 @@ router.get('/', async (req, res) => {
 router.get('/mood-stats', async (req, res) => {
   try {
     const stats = await DiaryEntry.aggregate([
+      { $match: { userId: req.userId } },
       { $group: { _id: '$mood', count: { $sum: 1 }, avgScore: { $avg: '$moodScore' } } },
       { $sort: { count: -1 } }
     ]);
@@ -58,6 +63,7 @@ router.post('/', upload.array('attachments', 5), async (req, res) => {
 
     const entry = new DiaryEntry({
       ...req.body,
+      userId: req.userId,
       tags,
       attachments: newAttachments,
       moodScore: moodScoreMap[req.body.mood] || 3
@@ -65,8 +71,8 @@ router.post('/', upload.array('attachments', 5), async (req, res) => {
     const saved = await entry.save();
 
     // Award XP for diary entry
-    let gamification = await Gamification.findOne();
-    if (!gamification) gamification = new Gamification();
+    let gamification = await Gamification.findOne({ userId: req.userId });
+    if (!gamification) gamification = new Gamification({ userId: req.userId });
     gamification.totalXP += 15;
     gamification.diaryEntries += 1;
     gamification.calculateLevel();
@@ -110,7 +116,11 @@ router.put('/:id', upload.array('attachments', 5), async (req, res) => {
        updateData.attachments = JSON.parse(updateData.existingAttachments);
     }
 
-    const updated = await DiaryEntry.findByIdAndUpdate(req.params.id, updateData, { new: true });
+    const updated = await DiaryEntry.findOneAndUpdate(
+      { _id: req.params.id, userId: req.userId },
+      updateData,
+      { new: true }
+    );
     if (!updated) return res.status(404).json({ error: 'Entry not found' });
     res.json(updated);
   } catch (err) {
@@ -121,7 +131,7 @@ router.put('/:id', upload.array('attachments', 5), async (req, res) => {
 // Delete diary entry
 router.delete('/:id', async (req, res) => {
   try {
-    const entry = await DiaryEntry.findByIdAndDelete(req.params.id);
+    const entry = await DiaryEntry.findOneAndDelete({ _id: req.params.id, userId: req.userId });
     if (!entry) return res.status(404).json({ error: 'Entry not found' });
     res.json({ message: 'Entry deleted' });
   } catch (err) {

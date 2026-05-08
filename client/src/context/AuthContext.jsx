@@ -1,0 +1,63 @@
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import api from '../api';
+
+const AuthContext = createContext(null);
+
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // Check for existing session on mount
+  useEffect(() => {
+    const token = localStorage.getItem('lifeos-token');
+    if (token) {
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      api.get('/auth/me')
+        .then(res => setUser(res.data.user))
+        .catch(() => {
+          localStorage.removeItem('lifeos-token');
+          delete api.defaults.headers.common['Authorization'];
+        })
+        .finally(() => setLoading(false));
+    } else {
+      setLoading(false);
+    }
+  }, []);
+
+  const login = useCallback(async (email, password) => {
+    const res = await api.post('/auth/login', { email, password });
+    const { user: u, token } = res.data;
+    localStorage.setItem('lifeos-token', token);
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    setUser(u);
+    return u;
+  }, []);
+
+  const signup = useCallback(async (name, email, password) => {
+    const res = await api.post('/auth/signup', { name, email, password });
+    const { user: u, token } = res.data;
+    localStorage.setItem('lifeos-token', token);
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    setUser(u);
+    return u;
+  }, []);
+
+  const logout = useCallback(async () => {
+    try { await api.post('/auth/logout'); } catch (_) {}
+    localStorage.removeItem('lifeos-token');
+    delete api.defaults.headers.common['Authorization'];
+    setUser(null);
+  }, []);
+
+  return (
+    <AuthContext.Provider value={{ user, loading, login, signup, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  return ctx;
+}

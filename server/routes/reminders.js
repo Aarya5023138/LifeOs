@@ -1,6 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const Reminder = require('../models/Reminder');
+const auth = require('../middleware/auth');
+
+// All reminder routes require authentication
+router.use(auth);
 
 // Helper: advance dateTime for recurring reminders
 function nextDateTime(date, pattern) {
@@ -21,7 +25,7 @@ function nextDateTime(date, pattern) {
 router.get('/', async (req, res) => {
   try {
     const { active } = req.query;
-    const filter = {};
+    const filter = { userId: req.userId };
     if (active !== undefined) filter.isActive = active === 'true';
     const reminders = await Reminder.find(filter).populate('linkedTask').sort({ dateTime: 1 });
     res.json(reminders);
@@ -30,12 +34,13 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Get due (fired) reminders – client polls this every 30s
+// Get due (fired) reminders – client polls this every 10s
 // Returns reminders that are due and not yet notified, then marks them
 router.get('/due', async (req, res) => {
   try {
     const now = new Date();
     const due = await Reminder.find({
+      userId: req.userId,
       isActive: true,
       notified: false,
       dateTime: { $lte: now },
@@ -68,7 +73,7 @@ router.get('/due', async (req, res) => {
 // Create reminder
 router.post('/', async (req, res) => {
   try {
-    const reminder = new Reminder(req.body);
+    const reminder = new Reminder({ ...req.body, userId: req.userId });
     const saved = await reminder.save();
     res.status(201).json(saved);
   } catch (err) {
@@ -79,7 +84,11 @@ router.post('/', async (req, res) => {
 // Update reminder
 router.put('/:id', async (req, res) => {
   try {
-    const updated = await Reminder.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const updated = await Reminder.findOneAndUpdate(
+      { _id: req.params.id, userId: req.userId },
+      req.body,
+      { new: true }
+    );
     if (!updated) return res.status(404).json({ error: 'Reminder not found' });
     res.json(updated);
   } catch (err) {
@@ -90,7 +99,7 @@ router.put('/:id', async (req, res) => {
 // Delete reminder
 router.delete('/:id', async (req, res) => {
   try {
-    const reminder = await Reminder.findByIdAndDelete(req.params.id);
+    const reminder = await Reminder.findOneAndDelete({ _id: req.params.id, userId: req.userId });
     if (!reminder) return res.status(404).json({ error: 'Reminder not found' });
     res.json({ message: 'Reminder deleted' });
   } catch (err) {

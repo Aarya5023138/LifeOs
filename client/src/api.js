@@ -6,7 +6,22 @@ const api = axios.create({
   baseURL: API_BASE,
   headers: { 'Content-Type': 'application/json' },
   timeout: 30000, // 30s timeout for cold starts
+  withCredentials: true,
 });
+
+// Auto-attach stored token on startup
+const storedToken = typeof window !== 'undefined' && localStorage.getItem('lifeos-token');
+if (storedToken) {
+  api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+}
+
+// Auth API (public — no token needed for these)
+export const authAPI = {
+  login:  (data)  => api.post('/auth/login', data),
+  signup: (data)  => api.post('/auth/signup', data),
+  logout: ()      => api.post('/auth/logout'),
+  me:     ()      => api.get('/auth/me'),
+};
 
 // ── Retry interceptor for Vercel cold starts ─────────────────────────────────
 // Serverless cold starts can cause the first request to fail or timeout.
