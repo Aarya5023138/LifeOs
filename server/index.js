@@ -30,31 +30,39 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const MONGODB_URI = process.env.MONGODB_URI;
 
+// 1. Add: mongoose.set('bufferCommands', false) globally
+mongoose.set('bufferCommands', false);
+
+// 3. Cache mongoose connection globally for Vercel serverless.
+let cached = global.mongoose;
+if (!cached) {
+  cached = global.mongoose = { conn: null, promise: null };
+}
+
 async function connectDB() {
-  // 1. If mongoose is already connected, return immediately
-  if (mongoose.connection.readyState === 1) {
-    return mongoose.connection;
+  // 4. Prevent reconnecting on every request.
+  if (cached.conn) {
+    return cached.conn;
   }
 
-  // 2. If a connection promise is already in-flight, reuse it
-  //    (prevents multiple parallel connection attempts on cold start)
-  if (global._mongooseConnectionPromise) {
-    await global._mongooseConnectionPromise;
-    return mongoose.connection;
-  }
-
-  // 3. No URI? Fall back to in-memory for local dev only
   if (!MONGODB_URI) {
     if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+      if (!cached.promise) {
+        try {
+          const { MongoMemoryServer } = require('mongodb-memory-server');
+          console.log('🔄 Starting in-memory MongoDB...');
+          const mongod = await MongoMemoryServer.create();
+          cached.promise = mongoose.connect(mongod.getUri(), { serverSelectionTimeoutMS: 5000, connectTimeoutMS: 5000 }).then(m => m);
+        } catch (err) {
+          console.error('❌ In-memory MongoDB failed:', err.message);
+          return null;
+        }
+      }
       try {
-        const { MongoMemoryServer } = require('mongodb-memory-server');
-        console.log('🔄 Starting in-memory MongoDB...');
-        const mongod = await MongoMemoryServer.create();
-        await mongoose.connect(mongod.getUri());
+        cached.conn = await cached.promise;
         console.log('✅ In-memory MongoDB ready (data lost on restart)');
-        return mongoose.connection;
+        return cached.conn;
       } catch (err) {
-        console.error('❌ In-memory MongoDB failed:', err.message);
         return null;
       }
     }
@@ -62,48 +70,65 @@ async function connectDB() {
     return null;
   }
 
-  // 4. Create a new connection and cache the promise globally
-  try {
-    global._mongooseConnectionPromise = mongoose.connect(MONGODB_URI, {
+  if (!cached.promise) {
+    // 2. Use: serverSelectionTimeoutMS: 5000, connectTimeoutMS: 5000
+    const opts = {
       serverSelectionTimeoutMS: 5000,
+      connectTimeoutMS: 5000,
       socketTimeoutMS: 45000,
-      maxPoolSize: 5,           // Lower pool for serverless
-      bufferCommands: false,    // Fail fast instead of hanging
-    });
+      maxPoolSize: 5,
+    };
 
-    await global._mongooseConnectionPromise;
-    console.log('✅ Connected to MongoDB');
-    return mongoose.connection;
+    console.log('🔄 Connecting to MongoDB...');
+    cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongooseInstance) => {
+      // 7. Add proper connection success logs.
+      console.log('✅ Connected to MongoDB');
+      return mongooseInstance;
+    }).catch(err => {
+      // 7. Add proper connection error logs.
+      console.error('⚠️  MongoDB connection error:', err.message);
+      // 9. Ensure no infinite connection attempts.
+      cached.promise = null; 
+      throw err;
+    });
+  }
+
+  try {
+    cached.conn = await cached.promise;
   } catch (err) {
-    console.error('⚠️  MongoDB connection error:', err.message);
-    global._mongooseConnectionPromise = null; // Allow retry on next request
+    cached.promise = null;
     return null;
   }
+
+  return cached.conn;
 }
 
-// ── Eagerly start connecting on module load ──────────────────────────────────
-// This runs once when Vercel loads the function, so the connection is
-// already in-flight by the time the first request arrives.
-const connectionReady = connectDB();
+// 8. Fix cold-start optimization for Vercel by eagerly connecting
+const connectionReady = connectDB().catch(console.error);
 
 // ── DB-readiness middleware ──────────────────────────────────────────────────
-// On Vercel, if MONGODB_URI is missing or the connection fails, return 503
-// immediately instead of letting mongoose buffer commands forever.
 app.use(async (req, res, next) => {
   // Let health & debug endpoints through without DB
   if (req.path === '/api/health' || req.path === '/api/debug') return next();
 
   try {
+    // 5. Await MongoDB connection before routes start.
     await connectionReady;
-    if (mongoose.connection.readyState !== 1) await connectDB();
-  } catch (_) {}
+    if (!cached.conn || mongoose.connection.readyState !== 1) {
+      await connectDB();
+    }
+  } catch (err) {
+    console.error('Middleware DB connection error:', err.message);
+  }
 
-  if (mongoose.connection.readyState !== 1) {
+  // 6. Return 503 immediately if DB unavailable.
+  if (!cached.conn || mongoose.connection.readyState !== 1) {
     return res.status(503).json({
       error: 'Database unavailable. Please check MONGODB_URI environment variable on Vercel.',
       hint: process.env.MONGODB_URI ? 'MONGODB_URI is set but connection failed' : 'MONGODB_URI is NOT set',
     });
   }
+  
   next();
 });
 
