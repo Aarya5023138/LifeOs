@@ -74,11 +74,24 @@ async function connectDB() {
 
 const connectionReady = connectDB();
 
+// ── DB-readiness middleware ──────────────────────────────────────────────────
+// On Vercel, if MONGODB_URI is missing or the connection fails, return 503
+// immediately instead of letting mongoose buffer commands forever.
 app.use(async (req, res, next) => {
+  // Let health & debug endpoints through without DB
+  if (req.path === '/api/health' || req.path === '/api/debug') return next();
+
   try {
     await connectionReady;
     if (mongoose.connection.readyState !== 1) await connectDB();
   } catch (_) {}
+
+  if (mongoose.connection.readyState !== 1) {
+    return res.status(503).json({
+      error: 'Database unavailable. Please check MONGODB_URI environment variable on Vercel.',
+      hint: process.env.MONGODB_URI ? 'MONGODB_URI is set but connection failed' : 'MONGODB_URI is NOT set',
+    });
+  }
   next();
 });
 
@@ -99,6 +112,23 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     db: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// Debug endpoint for diagnosing Vercel deployment issues
+app.get('/api/debug', (req, res) => {
+  res.json({
+    env: {
+      VERCEL: !!process.env.VERCEL,
+      NODE_ENV: process.env.NODE_ENV || 'not set',
+      MONGODB_URI: process.env.MONGODB_URI ? '✅ set (' + process.env.MONGODB_URI.substring(0, 20) + '...)' : '❌ NOT SET',
+      JWT_SECRET: process.env.JWT_SECRET ? '✅ set' : '❌ NOT SET (using fallback)',
+    },
+    db: {
+      readyState: mongoose.connection.readyState,
+      status: ['disconnected', 'connected', 'connecting', 'disconnecting'][mongoose.connection.readyState] || 'unknown',
+    },
     timestamp: new Date().toISOString(),
   });
 });
