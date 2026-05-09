@@ -13,9 +13,7 @@ import {
   HiOutlineStar,
   HiOutlineDocumentText,
   HiOutlineRefresh,
-  HiOutlineLogout,
 } from 'react-icons/hi';
-import { useAuth } from '../context/AuthContext';
 import './Sidebar.css';
 
 const navItems = [
@@ -33,14 +31,8 @@ const navItems = [
 export default function Sidebar() {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { user, logout } = useAuth();
 
   const closeMobile = () => setMobileOpen(false);
-
-  const handleLogout = () => {
-    closeMobile();
-    logout();
-  };
 
   return (
     <>
@@ -101,23 +93,7 @@ export default function Sidebar() {
             <span className="nav-label">Settings</span>
             {location.pathname === '/settings' && <div className="nav-indicator" />}
           </NavLink>
-
-          {/* User info + logout */}
-          {user && (
-            <div className="sidebar-user">
-              <div className="sidebar-user-avatar">
-                {user.name?.charAt(0).toUpperCase() || '?'}
-              </div>
-              <div className="sidebar-user-info">
-                <span className="sidebar-user-name">{user.name}</span>
-                <span className="sidebar-user-email">{user.email}</span>
-              </div>
-              <button className="sidebar-logout-btn" onClick={handleLogout} title="Logout">
-                <HiOutlineLogout />
-              </button>
-            </div>
-          )}
-          <div className="sidebar-version">v2.0.0</div>
+          <div className="sidebar-version">v1.0.0</div>
         </div>
       </aside>
     </>

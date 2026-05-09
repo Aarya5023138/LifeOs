@@ -1,17 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const Gamification = require('../models/Gamification');
-const auth = require('../middleware/auth');
-
-// All gamification routes require authentication
-router.use(auth);
 
 // Get gamification stats
 router.get('/', async (req, res) => {
   try {
-    let stats = await Gamification.findOne({ userId: req.userId });
+    let stats = await Gamification.findOne();
     if (!stats) {
-      stats = await new Gamification({ userId: req.userId }).save();
+      stats = await new Gamification().save();
     } else if (stats.lastCompletedAllDate) {
       // Dynamically check if streak is broken (more than 1 day passed without completing all tasks)
       const now = new Date();
@@ -41,8 +37,8 @@ router.get('/', async (req, res) => {
 // Reset streaks (for testing)
 router.post('/reset', async (req, res) => {
   try {
-    let stats = await Gamification.findOne({ userId: req.userId });
-    if (!stats) stats = new Gamification({ userId: req.userId });
+    let stats = await Gamification.findOne();
+    if (!stats) stats = new Gamification();
     stats.currentStreak = 0;
     stats.totalXP = 0;
     stats.level = 1;
@@ -59,8 +55,8 @@ router.post('/reset', async (req, res) => {
 // Reset only the streak
 router.post('/reset-streak', async (req, res) => {
   try {
-    let stats = await Gamification.findOne({ userId: req.userId });
-    if (!stats) stats = new Gamification({ userId: req.userId });
+    let stats = await Gamification.findOne();
+    if (!stats) stats = new Gamification();
     stats.currentStreak = 0;
     await stats.save();
     res.json(stats);

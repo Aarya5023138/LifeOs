@@ -2,10 +2,6 @@ const express = require('express');
 const router = express.Router();
 const Task = require('../models/Task');
 const Gamification = require('../models/Gamification');
-const auth = require('../middleware/auth');
-
-// All task routes require authentication
-router.use(auth);
 
 // Get all tasks with optional filters
 router.get('/', async (req, res) => {
@@ -14,12 +10,12 @@ router.get('/', async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     await Task.updateMany(
-      { userId: req.userId, isDaily: true, status: 'done', completedAt: { $lt: today } },
+      { isDaily: true, status: 'done', completedAt: { $lt: today } },
       { $set: { status: 'todo', completedAt: null } }
     );
 
     const { category, status, priority, search } = req.query;
-    const filter = { userId: req.userId };
+    const filter = {};
     if (category) filter.category = category;
     if (status) filter.status = status;
     if (priority) filter.priority = priority;
@@ -35,7 +31,7 @@ router.get('/', async (req, res) => {
 // Get single task
 router.get('/:id', async (req, res) => {
   try {
-    const task = await Task.findOne({ _id: req.params.id, userId: req.userId });
+    const task = await Task.findById(req.params.id);
     if (!task) return res.status(404).json({ error: 'Task not found' });
     res.json(task);
   } catch (err) {
@@ -49,7 +45,6 @@ router.post('/', async (req, res) => {
     const pointsMap = { low: 5, medium: 10, high: 20, urgent: 30 };
     const task = new Task({
       ...req.body,
-      userId: req.userId,
       points: pointsMap[req.body.priority] || 10
     });
     const saved = await task.save();
@@ -62,7 +57,7 @@ router.post('/', async (req, res) => {
 // Update task
 router.put('/:id', async (req, res) => {
   try {
-    const existing = await Task.findOne({ _id: req.params.id, userId: req.userId });
+    const existing = await Task.findById(req.params.id);
     if (!existing) return res.status(404).json({ error: 'Task not found' });
 
     const wasNotDone = existing.status !== 'done';
@@ -71,8 +66,8 @@ router.put('/:id', async (req, res) => {
     if (wasNotDone && isNowDone) {
       req.body.completedAt = new Date();
       // Award XP
-      let gamification = await Gamification.findOne({ userId: req.userId });
-      if (!gamification) gamification = new Gamification({ userId: req.userId });
+      let gamification = await Gamification.findOne();
+      if (!gamification) gamification = new Gamification();
       gamification.totalXP += existing.points;
       gamification.tasksCompleted += 1;
       gamification.calculateLevel();
@@ -87,13 +82,11 @@ router.put('/:id', async (req, res) => {
       // - Daily tasks that are not done
       // - Non-daily tasks due today that are not done (excluding the one we just completed)
       const incompleteDailyCount = await Task.countDocuments({
-        userId: req.userId,
         _id: { $ne: existing._id },
         isDaily: true,
         status: { $ne: 'done' }
       });
       const incompleteNonDailyTodayCount = await Task.countDocuments({
-        userId: req.userId,
         _id: { $ne: existing._id },
         isDaily: false,
         status: { $ne: 'done' },
@@ -126,11 +119,7 @@ router.put('/:id', async (req, res) => {
       await gamification.save();
     }
 
-    const updated = await Task.findOneAndUpdate(
-      { _id: req.params.id, userId: req.userId },
-      req.body,
-      { new: true }
-    );
+    const updated = await Task.findByIdAndUpdate(req.params.id, req.body, { new: true });
     res.json(updated);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -140,7 +129,7 @@ router.put('/:id', async (req, res) => {
 // Delete task
 router.delete('/:id', async (req, res) => {
   try {
-    const task = await Task.findOneAndDelete({ _id: req.params.id, userId: req.userId });
+    const task = await Task.findByIdAndDelete(req.params.id);
     if (!task) return res.status(404).json({ error: 'Task not found' });
     res.json({ message: 'Task deleted' });
   } catch (err) {
