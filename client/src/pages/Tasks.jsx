@@ -54,6 +54,12 @@ export default function Tasks() {
         ...form,
         tags: form.tags ? form.tags.split(',').map(t => t.trim()) : [],
       };
+      
+      // Fix: Don't send empty dueDate string, which causes Mongoose CastError
+      if (!payload.dueDate) {
+        delete payload.dueDate;
+      }
+
       if (editingTask) {
         await taskAPI.update(editingTask._id, payload);
         toast.success('Task updated!');

@@ -31,11 +31,14 @@ export default function Goals() {
     if (!form.title.trim()) return toast.error('Goal title is required');
     
     try {
+      const payload = { ...form };
+      if (!payload.targetDate) delete payload.targetDate;
+
       if (editingId) {
-        await goalAPI.update(editingId, form);
+        await goalAPI.update(editingId, payload);
         toast.success('Goal updated! 🎯');
       } else {
-        await goalAPI.create(form);
+        await goalAPI.create(payload);
         toast.success('Goal added! 🚀');
       }
       closeModal();
