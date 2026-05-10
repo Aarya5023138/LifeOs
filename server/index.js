@@ -43,21 +43,8 @@ async function connectDB() {
     return mongoose.connection;
   }
 
-  // 3. No URI? Fall back to in-memory for local dev only
+  // 3. Ensure URI exists
   if (!MONGODB_URI) {
-    if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
-      try {
-        const { MongoMemoryServer } = require('mongodb-memory-server');
-        console.log('🔄 Starting in-memory MongoDB...');
-        const mongod = await MongoMemoryServer.create();
-        await mongoose.connect(mongod.getUri());
-        console.log('✅ In-memory MongoDB ready (data lost on restart)');
-        return mongoose.connection;
-      } catch (err) {
-        console.error('❌ In-memory MongoDB failed:', err.message);
-        return null;
-      }
-    }
     console.warn('⚠️  No MONGODB_URI set. Database unavailable.');
     return null;
   }

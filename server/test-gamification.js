@@ -1,8 +1,10 @@
 const mongoose = require('mongoose');
 const Gamification = require('./models/Gamification');
 
+require('dotenv').config();
+
 async function testStreak() {
-  await mongoose.connect('mongodb://127.0.0.1:27017/lifeos', { serverSelectionTimeoutMS: 3000 }).catch(async () => {
+  await mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/lifeos', { serverSelectionTimeoutMS: 3000 }).catch(async () => {
     console.log("Using in memory db instead? Actually I shouldn't need a real db to test methods if I just instantiate a doc.");
   });
   
