@@ -88,24 +88,52 @@ app.use(async (req, res, next) => {
   if (mongoose.connection.readyState !== 1) {
     // Return mock data so the Vercel deployment doesn't crash the frontend
     console.warn('Handling request in Mock Mode (No Database Connected)');
+    
+    if (!global._mockStore) {
+      global._mockStore = { tasks: [], goals: [], reminders: [], diary: [], notes: [], habits: [], calendar: [] };
+    }
+    const store = global._mockStore;
+    const resource = req.path.split('/')[2]; // 'tasks', 'goals', etc.
+
     if (req.method === 'GET') {
-      if (req.path.includes('dashboard')) {
+      if (resource === 'dashboard') {
         return res.json({
-          tasks: { total: 0, completed: 0, pending: 0, overdue: 0, today: [] },
-          reminders: [], events: [], recentDiary: [],
-          gamification: { totalXP: 0, level: 1, currentStreak: 0, longestStreak: 0, tasksCompleted: 0, achievements: [] },
+          tasks: { total: store.tasks.length, completed: store.tasks.filter(t=>t.status==='completed').length, pending: store.tasks.filter(t=>t.status!=='completed').length, overdue: 0, today: store.tasks },
+          reminders: store.reminders, events: store.calendar, recentDiary: store.diary,
+          gamification: { totalXP: store.tasks.length * 10, level: 1, currentStreak: 1, longestStreak: 1, tasksCompleted: store.tasks.length, achievements: [] },
           moodStats: []
         });
       }
-      return res.json([]);
+      return res.json(store[resource] || []);
     }
-    // For POST/PUT/DELETE, return a fake success response
-    return res.json({ 
-      _id: 'mock-' + Date.now(), 
-      success: true, 
-      title: req.body.title || 'Mock Item',
-      message: 'Action simulated (Database not connected)' 
-    });
+
+    if (req.method === 'POST') {
+      const newItem = { _id: 'mock-' + Date.now(), createdAt: new Date().toISOString(), ...req.body };
+      if (store[resource]) store[resource].push(newItem);
+      return res.status(201).json(newItem);
+    }
+
+    if (req.method === 'PUT') {
+      const id = req.path.split('/')[3];
+      if (store[resource]) {
+        const index = store[resource].findIndex(item => item._id === id);
+        if (index !== -1) {
+          store[resource][index] = { ...store[resource][index], ...req.body };
+          return res.json(store[resource][index]);
+        }
+      }
+      return res.json({ success: true });
+    }
+
+    if (req.method === 'DELETE') {
+      const id = req.path.split('/')[3];
+      if (store[resource]) {
+        store[resource] = store[resource].filter(item => item._id !== id);
+      }
+      return res.json({ success: true });
+    }
+
+    return res.json({ success: true, message: 'Mock action' });
   }
   next();
 });
